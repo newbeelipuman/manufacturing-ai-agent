@@ -1,0 +1,17 @@
+.venv
+venv
+__pycache__
+*.pyc
+.docker-config-tmp
+.pytest_cache
+.pytest-tmp
+.pytest-workspace-tmp
+.ruff_cache
+.mypy_cache
+.env
+local_dev.db
+test_m2.db
+frontend/node_modules
+frontend/.vite
+dist-cloud
+*.log

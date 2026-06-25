@@ -1,0 +1,12 @@
+services:
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  backend:
+    ports: !reset []
+
+  nginx:
+    ports: !override ["80:80"]
