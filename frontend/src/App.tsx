@@ -5,10 +5,17 @@ import {
   ClipboardCheck,
   FileSearch,
   Gauge,
+  History,
   LayoutDashboard,
   LockKeyhole,
   LogOut,
   MessageSquareText,
+  MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  Search,
+  SendHorizontal,
   Server,
   ShieldCheck
 } from "lucide-react";
@@ -250,6 +257,8 @@ function LoginPage({
 function ChatWorkbench({ user }: { user: SessionUser }) {
   const [question, setQuestion] = useState(demoQuestions[0]);
   const [response, setResponse] = useState<ChatResponse | null>(null);
+  const [assistantOpen, setAssistantOpen] = useState(true);
+  const [historySearch, setHistorySearch] = useState("");
   const [history, setHistory] = useState<Array<{ question: string; conclusion: string }>>(() => {
     try {
       return JSON.parse(window.localStorage.getItem("chat-history-draft") ?? "[]");
@@ -272,7 +281,7 @@ function ChatWorkbench({ user }: { user: SessionUser }) {
           conclusion: nextResponse.business_conclusion || nextResponse.answer
         },
         ...history.filter((item) => item.question !== question)
-      ].slice(0, 8);
+      ].slice(0, 20);
       setHistory(nextHistory);
       window.localStorage.setItem("chat-history-draft", JSON.stringify(nextHistory));
     } catch (err) {
@@ -283,106 +292,193 @@ function ChatWorkbench({ user }: { user: SessionUser }) {
   }
 
   const responseTitle = response?.success === false ? "需要补充信息" : "分析结果";
+  const filteredHistory = history.filter((item) => {
+    const keyword = historySearch.trim().toLowerCase();
+    if (!keyword) {
+      return true;
+    }
+    return `${item.question} ${item.conclusion}`.toLowerCase().includes(keyword);
+  });
 
   return (
-    <section className="workspace-grid">
-      <div className="panel span-7">
-        <div className="panel-title">
-          <h2>业务问答</h2>
-          <span className="pill">{user.role}</span>
+    <section className={`chat-shell codex-chat-shell ${assistantOpen ? "" : "assistant-collapsed"}`}>
+      <aside className="chat-assistant-rail codex-thread-rail" aria-label="问答辅助栏">
+        <button
+          className="icon-button rail-toggle"
+          title={assistantOpen ? "收起辅助栏" : "展开辅助栏"}
+          aria-label={assistantOpen ? "收起辅助栏" : "展开辅助栏"}
+          onClick={() => setAssistantOpen((open) => !open)}
+        >
+          {assistantOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+        </button>
+        {assistantOpen ? (
+          <div className="chat-assistant-inner">
+            <section className="rail-section">
+              <div className="rail-heading">
+                <MessageSquareText size={16} />
+                <h3>常见问题</h3>
+              </div>
+              <div className="question-shortcuts">
+                {demoQuestions.map((item) => (
+                  <button key={item} onClick={() => setQuestion(item)}>
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </section>
+            <section className="rail-section rail-section-fill">
+              <div className="rail-heading">
+                <History size={16} />
+                <h3>历史聊天</h3>
+              </div>
+              <label className="search-field" aria-label="搜索历史聊天">
+                <Search size={15} />
+                <input
+                  value={historySearch}
+                  onChange={(event) => setHistorySearch(event.target.value)}
+                  placeholder="搜索历史"
+                />
+              </label>
+              {filteredHistory.length ? (
+                <div className="history-list">
+                  {filteredHistory.map((item) => (
+                    <button
+                      className="history-row"
+                      key={item.question}
+                      onClick={() => setQuestion(item.question)}
+                    >
+                      <strong>{item.question}</strong>
+                      <span>{item.conclusion}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="empty compact">暂无匹配历史。</p>
+              )}
+            </section>
+          </div>
+        ) : null}
+      </aside>
+
+      <div className="chat-conversation">
+        <header className="chat-conversation-header">
+          <div>
+            <h2>{question}</h2>
+            <p className="muted compact">业务问答 / 单条问题分析模式</p>
+          </div>
+          <div className="chat-header-actions">
+            <span className="pill">{user.role}</span>
+            <button className="icon-button" title="更多" aria-label="更多">
+              <MoreHorizontal size={18} />
+            </button>
+          </div>
+        </header>
+        {error ? <p className="error">{error}</p> : null}
+
+        <div className="chat-message-scroll">
+          <div className="followup-note codex-note">
+            后续优化标记：有限次数追问会作为会话层能力单独设计；当前先保持单条问题边界，避免多问题文本污染 SOP 向量检索和审计记录。
+          </div>
+          {response ? (
+            <div className="message-stack">
+              <article className="chat-message user-message">
+                <p>{question}</p>
+              </article>
+              <article className="chat-message assistant-message answer">
+                <div className="assistant-message-title">
+                  <h3>{responseTitle}</h3>
+                  <span>{response.requires_human_review ? "需要人工复核" : "只读分析"}</span>
+                </div>
+                <div className="summary-grid">
+                  <section>
+                    <span className="section-label">业务结论</span>
+                    <p>{response.business_conclusion}</p>
+                  </section>
+                  <section>
+                    <span className="section-label">建议下一步</span>
+                    <p>{response.suggested_next_action}</p>
+                  </section>
+                </div>
+                <div className="metric-row">
+                  <span>意图：{intentLabels[response.intent] ?? response.intent}</span>
+                  <span>风险：{riskLabels[response.risk_level] ?? response.risk_level}</span>
+                  <span>人工复核：{response.requires_human_review ? "需要" : "不需要"}</span>
+                </div>
+                <div className="result-sections">
+                  <section>
+                    <h4>检查数据</h4>
+                    <TagList items={response.checked_data} />
+                  </section>
+                  <section>
+                    <h4>风险因素</h4>
+                    <TagList items={response.risk_factors} />
+                  </section>
+                  <section>
+                    <h4>人工复核原因</h4>
+                    <TagList items={response.manual_review_reason} />
+                  </section>
+                </div>
+                <details className="raw-answer">
+                  <summary>原始回答与审计文本</summary>
+                  <p>{response.answer}</p>
+                </details>
+                <div className="answer-details-grid">
+                  <section>
+                    <h4>工具与权限</h4>
+                    <ToolPermissionTable tools={response.called_tools} />
+                  </section>
+                  <section>
+                    <h4>证据</h4>
+                    <TagList items={response.evidence} />
+                  </section>
+                  <section>
+                    <h4>建议</h4>
+                    <TagList items={response.recommendations} />
+                  </section>
+                </div>
+                <details className="raw-answer">
+                  <summary>决策记录</summary>
+                  <JsonBlock value={response.decision_record} />
+                </details>
+              </article>
+            </div>
+          ) : (
+            <div className="chat-empty-state">
+              <h2>制造业务只读问答</h2>
+              <p>输入问题后会展示业务回答、工具调用、权限结果和决策记录。</p>
+            </div>
+          )}
         </div>
-        <label>
-          演示问题
-          <select value={question} onChange={(event) => setQuestion(event.target.value)}>
+
+        <div className="chat-composer">
+          <select
+            className="composer-preset"
+            aria-label="演示问题"
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+          >
             {demoQuestions.map((item) => (
               <option key={item} value={item}>
                 {item}
               </option>
             ))}
           </select>
-        </label>
-        <textarea value={question} onChange={(event) => setQuestion(event.target.value)} />
-        <button className="primary" onClick={submit} disabled={loading}>
-          {loading ? "分析中..." : "开始分析"}
-        </button>
-        {error ? <p className="error">{error}</p> : null}
-        {response ? (
-          <div className="answer">
-            <h3>{responseTitle}</h3>
-            <div className="summary-grid">
-              <section>
-                <span className="section-label">业务结论</span>
-                <p>{response.business_conclusion}</p>
-              </section>
-              <section>
-                <span className="section-label">建议下一步</span>
-                <p>{response.suggested_next_action}</p>
-              </section>
-            </div>
-            <div className="metric-row">
-              <span>意图：{intentLabels[response.intent] ?? response.intent}</span>
-              <span>风险：{riskLabels[response.risk_level] ?? response.risk_level}</span>
-              <span>人工复核：{response.requires_human_review ? "需要" : "不需要"}</span>
-            </div>
-            <div className="result-sections">
-              <section>
-                <h4>检查数据</h4>
-                <TagList items={response.checked_data} />
-              </section>
-              <section>
-                <h4>风险因素</h4>
-                <TagList items={response.risk_factors} />
-              </section>
-              <section>
-                <h4>人工复核原因</h4>
-                <TagList items={response.manual_review_reason} />
-              </section>
-            </div>
-            <details className="raw-answer">
-              <summary>原始回答与审计文本</summary>
-              <p>{response.answer}</p>
-            </details>
-          </div>
-        ) : (
-          <p className="empty">输入问题后会展示业务回答、工具调用、权限结果和决策记录。</p>
-        )}
-      </div>
-      <div className="panel span-5">
-        <h2>常见问题</h2>
-        <div className="question-shortcuts">
-          {demoQuestions.map((item) => (
-            <button key={item} onClick={() => setQuestion(item)}>
-              {item}
+          <textarea
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="询问订单、工单、采购、库存或 SOP..."
+          />
+          <div className="composer-actions">
+            <button className="icon-button" title="添加上下文" aria-label="添加上下文">
+              <Plus size={18} />
             </button>
-          ))}
-        </div>
-        <h2>历史聊天</h2>
-        {history.length ? (
-          <div className="result-list compact-list">
-            {history.map((item) => (
-              <button className="log-row" key={item.question} onClick={() => setQuestion(item.question)}>
-                <span>{item.question}</span>
-                <span>{item.conclusion}</span>
-              </button>
-            ))}
+            <span className="composer-boundary">只读访问</span>
+            <button className="primary send-button" onClick={submit} disabled={loading}>
+              {loading ? "分析中..." : "开始分析"}
+              <SendHorizontal size={16} />
+            </button>
           </div>
-        ) : (
-          <p className="empty">暂无历史会话。</p>
-        )}
-        <h2>工具与权限</h2>
-        {response ? (
-          <>
-            <ToolPermissionTable tools={response.called_tools} />
-            <h3>证据</h3>
-            <TagList items={response.evidence} />
-            <h3>建议</h3>
-            <TagList items={response.recommendations} />
-            <h3>决策记录</h3>
-            <JsonBlock value={response.decision_record} />
-          </>
-        ) : (
-          <p className="empty">尚未调用 Agent。</p>
-        )}
+        </div>
       </div>
     </section>
   );
@@ -1324,6 +1420,7 @@ function DeploymentStatusV2({
   const [serviceLog, setServiceLog] = useState<DeploymentLogResponse | null>(null);
   const [selectedReport, setSelectedReport] = useState<DeploymentReportResponse | null>(null);
   const [reportLoadingId, setReportLoadingId] = useState("");
+  const [reportQuery, setReportQuery] = useState("");
   const [error, setError] = useState("");
 
   async function check() {
@@ -1397,52 +1494,39 @@ function DeploymentStatusV2({
   };
   const serviceOptions = ["backend", "nginx", "postgres", "redis"];
   const selectedServiceLabel = serviceLabels[selectedService] ?? selectedService;
+  const reportFiles = status?.report_files ?? [
+    {
+      id: "cloud-deployment-check-report",
+      label: "cloud deployment report",
+      path: "docs/cloud-deployment-check-report.md",
+      exists: true
+    },
+    { id: "demo-report", label: "demo report", path: "docs/demo-report.md", exists: true }
+  ];
+  const reportContent = selectedReport?.content ?? "";
+  const reportQueryText = reportQuery.trim().toLowerCase();
+  const reportMatches = reportQueryText
+    ? reportContent
+        .split("\n")
+        .map((line, index) => ({ line, lineNumber: index + 1 }))
+        .filter((item) => item.line.toLowerCase().includes(reportQueryText))
+        .slice(0, 12)
+    : [];
+
+  function jumpToReportLine(lineNumber: number) {
+    const target = document.getElementById(`report-line-${lineNumber}`);
+    target?.scrollIntoView({ block: "center" });
+  }
 
   return (
     <section className="deployment-shell">
-      <div className="deployment-hero">
-        <div>
-          <h2>部署状态 / 只读运维控制台</h2>
-          <p>
-            实时读取健康检查、容器状态和最近日志；这里只做只读展示，不执行启动、停止、重启或部署操作。
-          </p>
-        </div>
-        <button className="primary" onClick={check}>检查健康状态</button>
-      </div>
       {error ? <p className="error">{error}</p> : null}
-      {status ? (
-        <>
-          <div className="deployment-summary">
-            <div>
-              <span>健康检查</span>
-              <strong className={health === "ok" ? "ok" : "deny"}>{health || "未读取"}</strong>
-            </div>
-            <div>
-              <span>运行环境</span>
-              <strong>{status.environment}</strong>
-            </div>
-            <div>
-              <span>应用版本</span>
-              <strong>{status.version}</strong>
-            </div>
-            <div>
-              <span>状态来源</span>
-              <strong>{statusSourceLabels[status.source] ?? status.source}</strong>
-            </div>
-            <div>
-              <span>Docker 可读</span>
-              <strong>{status.docker_available ? "可读取" : "不可读取"}</strong>
-            </div>
-          </div>
-          {status.message ? <p className="deployment-note">{status.message}</p> : null}
-        </>
-      ) : null}
 
       {activeView === "logs" ? (
       <div className="deployment-section deployment-log-section">
         <div className="section-heading">
           <h3>日志查看</h3>
-          <span>高频查看区域，日志内容保持原文</span>
+          <span>高频查看区域，只保留日志切换和原文窗口</span>
         </div>
         <div className="service-tabs" aria-label="日志服务">
           {serviceOptions.map((service) => (
@@ -1473,9 +1557,45 @@ function DeploymentStatusV2({
 
       {activeView === "services" ? (
       <div className="deployment-section">
-        <div className="section-heading">
+        <div className="deployment-hero compact-hero">
+          <div>
+            <h2>部署状态 / 只读运维控制台</h2>
+            <p>
+              实时读取健康检查、容器状态和最近日志；这里只做只读展示，不执行启动、停止、重启或部署操作。
+            </p>
+          </div>
+          <button className="primary" onClick={check}>检查健康状态</button>
+        </div>
+        {status ? (
+          <>
+            <div className="deployment-summary">
+              <div>
+                <span>健康检查</span>
+                <strong className={health === "ok" ? "ok" : "deny"}>{health || "未读取"}</strong>
+              </div>
+              <div>
+                <span>运行环境</span>
+                <strong>{status.environment}</strong>
+              </div>
+              <div>
+                <span>应用版本</span>
+                <strong>{status.version}</strong>
+              </div>
+              <div>
+                <span>状态来源</span>
+                <strong>{statusSourceLabels[status.source] ?? status.source}</strong>
+              </div>
+              <div>
+                <span>Docker 可读</span>
+                <strong>{status.docker_available ? "可读取" : "不可读取"}</strong>
+              </div>
+            </div>
+            {status.message ? <p className="deployment-note">{status.message}</p> : null}
+          </>
+        ) : null}
+        <div className="section-heading service-section-heading">
           <h3>服务状态</h3>
-          <span>中频查看，点击服务可切换日志</span>
+          <span>中频查看，点击服务可切换到对应日志</span>
         </div>
         {status?.services.length ? (
           <div className="service-grid">
@@ -1508,19 +1628,70 @@ function DeploymentStatusV2({
 
       {activeView === "reports" ? (
       <div className="deployment-section">
+        {selectedReport ? (
+          <div className="report-detail">
+            <div className="report-detail-header">
+              <button
+                onClick={() => {
+                  setSelectedReport(null);
+                  setReportQuery("");
+                }}
+              >
+                返回
+              </button>
+              <div>
+                <h3>{reportLabelMap[selectedReport.label] ?? selectedReport.label}</h3>
+                <span>{selectedReport.path}</span>
+              </div>
+              <label className="report-search" aria-label="报告内容搜索">
+                <input
+                  value={reportQuery}
+                  onChange={(event) => setReportQuery(event.target.value)}
+                  placeholder="搜索报告内容"
+                />
+              </label>
+            </div>
+            {reportQueryText ? (
+              <div className="report-match-list">
+                {reportMatches.length ? (
+                  reportMatches.map((match) => (
+                    <button key={match.lineNumber} onClick={() => jumpToReportLine(match.lineNumber)}>
+                      <strong>L{match.lineNumber}</strong>
+                      <span>{match.line}</span>
+                    </button>
+                  ))
+                ) : (
+                  <p className="empty compact">没有匹配内容。</p>
+                )}
+              </div>
+            ) : null}
+            <pre className="json-block report-content report-content-full">
+              {reportContent.split("\n").map((line, index) => {
+                const lineNumber = index + 1;
+                return (
+                  <span
+                    id={`report-line-${lineNumber}`}
+                    className={
+                      reportQueryText && line.toLowerCase().includes(reportQueryText)
+                        ? "report-line report-line-match"
+                        : "report-line"
+                    }
+                    key={lineNumber}
+                  >
+                    {line || " "}
+                    {"\n"}
+                  </span>
+                );
+              })}
+            </pre>
+          </div>
+        ) : (
+        <>
           <div className="section-heading">
             <h3>部署报告</h3>
-            <span>低频查看，文件名保持原样</span>
+            <span>低频查看，点开后进入独立阅读容器</span>
           </div>
-          {(status?.report_files ?? [
-            {
-              id: "cloud-deployment-check-report",
-              label: "cloud deployment report",
-              path: "docs/cloud-deployment-check-report.md",
-              exists: true
-            },
-            { id: "demo-report", label: "demo report", path: "docs/demo-report.md", exists: true }
-          ]).map((file) => {
+          {reportFiles.map((file) => {
             const reportId = file.id ?? reportIdByPath[file.path];
             return (
             <div className="report-row" key={file.path}>
@@ -1544,17 +1715,9 @@ function DeploymentStatusV2({
             </div>
             );
           })}
-          {selectedReport ? (
-            <div className="report-preview">
-              <div className="section-heading">
-                <h3>{reportLabelMap[selectedReport.label] ?? selectedReport.label}</h3>
-                <span>{selectedReport.path}</span>
-              </div>
-              <pre className="json-block report-content">{selectedReport.content}</pre>
-            </div>
-          ) : (
-            <p className="empty compact">点击“查看”后在这里显示报告内容。</p>
-          )}
+          <p className="empty compact">点击“查看”后进入报告阅读页。</p>
+        </>
+        )}
         </div>
       ) : null}
     </section>
@@ -1564,7 +1727,7 @@ function DeploymentStatusV2({
 function App() {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [active, setActive] = useState<NavKey>("chat");
-  const [deploymentSubView, setDeploymentSubView] = useState<DeploymentSubView>("logs");
+  const [deploymentSubView, setDeploymentSubView] = useState<DeploymentSubView>("services");
   const [accessError, setAccessError] = useState("");
   const [sessionMessage, setSessionMessage] = useState("");
   const visibleItems = useMemo(() => {
@@ -1641,42 +1804,56 @@ function App() {
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <div className="brand">
-          <LayoutDashboard size={22} />
-          <span>AI Agent Console</span>
+        <div className="sidebar-head">
+          <div className="brand">
+            <LayoutDashboard size={22} />
+            <span>AI Agent Console</span>
+          </div>
         </div>
         <nav aria-label="主导航">
           {visibleItems.map((item) => (
-            <div className="nav-group" key={item.key}>
+            <div
+              className={item.key === "deployment" ? "nav-group deployment-nav-group" : "nav-group"}
+              key={item.key}
+            >
               <button
                 className={activeKey === item.key ? "active" : ""}
                 onClick={() => {
                   setActive(item.key);
                   if (item.key === "deployment") {
-                    setDeploymentSubView("logs");
+                    setDeploymentSubView("services");
                   }
                 }}
               >
                 {iconByNav[item.key]}
-                {item.label}
+                <span>{item.label}</span>
               </button>
-              {item.key === "deployment" && activeKey === "deployment" ? (
+              {item.key === "deployment" ? (
                 <div className="subnav" aria-label="部署状态二级导航">
                   <button
-                    className={deploymentSubView === "logs" ? "active" : ""}
-                    onClick={() => setDeploymentSubView("logs")}
+                    className={activeKey === "deployment" && deploymentSubView === "logs" ? "active" : ""}
+                    onClick={() => {
+                      setActive("deployment");
+                      setDeploymentSubView("logs");
+                    }}
                   >
                     日志查看
                   </button>
                   <button
-                    className={deploymentSubView === "services" ? "active" : ""}
-                    onClick={() => setDeploymentSubView("services")}
+                    className={activeKey === "deployment" && deploymentSubView === "services" ? "active" : ""}
+                    onClick={() => {
+                      setActive("deployment");
+                      setDeploymentSubView("services");
+                    }}
                   >
                     服务状态
                   </button>
                   <button
-                    className={deploymentSubView === "reports" ? "active" : ""}
-                    onClick={() => setDeploymentSubView("reports")}
+                    className={activeKey === "deployment" && deploymentSubView === "reports" ? "active" : ""}
+                    onClick={() => {
+                      setActive("deployment");
+                      setDeploymentSubView("reports");
+                    }}
                   >
                     部署报告
                   </button>
@@ -1686,7 +1863,7 @@ function App() {
           ))}
         </nav>
       </aside>
-      <section className="content">
+      <section className={`content ${activeKey === "chat" ? "chat-content" : ""}`}>
         <header className="topbar">
           <div>
             <p className="eyebrow">只读业务边界</p>

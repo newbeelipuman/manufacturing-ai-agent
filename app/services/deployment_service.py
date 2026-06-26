@@ -39,6 +39,8 @@ def _run_readonly_docker_command(args: list[str], timeout: int = 5) -> dict[str,
             args,
             cwd=ROOT_DIR,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             capture_output=True,
             timeout=timeout,
             check=False,
@@ -65,8 +67,8 @@ def _compose_base_command() -> list[str]:
     return command
 
 
-def _parse_compose_ps(output: str) -> list[dict[str, Any]]:
-    lines = [line.strip() for line in output.splitlines() if line.strip()]
+def _parse_compose_ps(output: str | None) -> list[dict[str, Any]]:
+    lines = [line.strip() for line in (output or "").splitlines() if line.strip()]
     if not lines:
         return []
     parsed: list[dict[str, Any]] = []

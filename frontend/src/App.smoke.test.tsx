@@ -613,17 +613,22 @@ describe("P8 console smoke", () => {
 
     expect(await screen.findByText("健康检查")).toBeInTheDocument();
     expect(screen.getByText("ok")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "日志查看" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "后端服务" })).toBeInTheDocument();
-    expect(screen.getByText("高频查看区域，日志内容保持原文")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "服务状态" })).toBeInTheDocument();
+    expect(screen.getByText("中频查看，点击服务可切换到对应日志")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /后端服务/ })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "服务状态" }));
-    expect(await screen.findByText("中频查看，点击服务可切换日志")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "日志查看" }));
+    expect(screen.getByRole("heading", { name: "日志查看" })).toBeInTheDocument();
+    expect(screen.getByText("高频查看区域，只保留日志切换和原文窗口")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "部署报告" }));
-    expect(await screen.findByText("低频查看，文件名保持原样")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "查看" }));
+    expect(await screen.findByText("低频查看，点开后进入独立阅读容器")).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole("button", { name: "查看" })[0]);
     expect(await screen.findByText(/Cloud Deployment Check Report/)).toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText("搜索报告内容"), "Report");
+    expect(await screen.findByRole("button", { name: /L1/ })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "返回" }));
+    expect(screen.getByText("点击“查看”后进入报告阅读页。")).toBeInTheDocument();
   });
 
   it("shows a 404 page for unknown routes before login", () => {
