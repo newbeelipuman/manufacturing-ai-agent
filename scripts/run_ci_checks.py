@@ -55,6 +55,8 @@ def docker_env() -> dict[str, str]:
 def main() -> None:
     run([sys.executable, "-m", "compileall", "app"])
     run([sys.executable, "-m", "compileall", "scripts"])
+    run(["npm", "run", "test:smoke"], cwd=ROOT_DIR / "frontend")
+    run(["npm", "run", "build"], cwd=ROOT_DIR / "frontend")
     run(
         [
             sys.executable,
@@ -68,8 +70,6 @@ def main() -> None:
         ],
         env=pytest_env(),
     )
-    run(["npm", "run", "test:smoke"], cwd=ROOT_DIR / "frontend")
-    run(["npm", "run", "build"], cwd=ROOT_DIR / "frontend")
     run([sys.executable, "scripts/package_cloud_deployment.py"])
     run([sys.executable, "scripts/verify_cloud_package.py"])
     run([sys.executable, "scripts/verify_cloud_report.py"])
